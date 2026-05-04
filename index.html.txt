@@ -1,0 +1,300 @@
+import React, { useState } from 'react';
+import { 
+  Calendar, BookOpen, User, Star, ArrowRight, 
+  RefreshCw, Sparkles, Book, BabyIcon, Moon
+} from 'lucide-react';
+
+const apiKey = ""; // 실행 환경에서 자동으로 제공됩니다.
+
+// 만세력 데이터
+const KAN = ['갑', '을', '병', '정', '무', '기', '경', '신', '임', '계'];
+const JI = ['자', '축', '인', '묘', '진', '사', '오', '미', '신', '유', '술', '해'];
+
+const ILJU_DATA = {
+  '갑': { element: '목(木)', nature: '하늘을 향해 뻗은 고결한 거목', traits: ['추진력', '리더십', '정직', '성장'] },
+  '을': { element: '목(木)', nature: '바람에 흔들려도 꺾이지 않는 유연한 꽃무리', traits: ['적응력', '끈기', '예술적', '섬세함'] },
+  '병': { element: '화(Fire)', nature: '만물을 비추는 찬란한 태양의 빛', traits: ['열정', '명랑', '솔직', '표현력'] },
+  '정': { element: '화(Fire)', nature: '어둠 속을 밝히는 따스하고 고요한 등불', traits: ['헌신', '사려깊음', '내유외강', '예의'] },
+  '무': { element: '토(Earth)', nature: '모든 것을 품어안은 웅장하고 깊은 대지', traits: ['신용', '중립', '포용력', '고집'] },
+  '기': { element: '토(Earth)', nature: '생명을 길러내는 포근하고 비옥한 대지', traits: ['자애로움', '꼼꼼함', '알뜰함', '포용'] },
+  '경': { element: '금(Metal)', nature: '정의를 수호하는 강직하고 단단한 바위', traits: ['결단력', '의리', '강직함', '변혁'] },
+  '신': { element: '금(Metal)', nature: '어둠 속에서도 광채를 잃지 않는 고귀한 보석', traits: ['예민함', '정교함', '완벽주의', '품격'] },
+  '임': { element: '수(Water)', nature: '끝을 알 수 없는 지혜의 깊은 바다', traits: ['지혜', '유연함', '자유', '사색'] },
+  '계': { element: '수(Water)', nature: '만물을 적시는 맑고 영특한 은하수의 비', traits: ['영특함', '겸손', '상상력', '여림'] },
+};
+
+const JI_TRAITS = {
+  '자': '지혜의 영감이 샘솟는 밤', '축': '성실한 침묵이 열매 맺는 새벽', '인': '새로운 시작을 알리는 사자의 포효',
+  '묘': '만물에 생기를 불어넣는 토끼의 걸음', '진': '하늘 위로 비상하는 용의 기상', '사': '명석한 통찰을 지닌 뱀의 지혜',
+  '오': '진취적인 에너지를 품은 말의 질주', '미': '평화로운 안식을 찾는 양의 온기', '신': '재기발랄한 변화의 재주',
+  '유': '순수하고 예리한 감각의 새벽닭', '술': '충직하게 자리를 지키는 수호의 별', '해': '여유롭고 정이 넘치는 바다의 마음'
+};
+
+const App = () => {
+  const [birthDate, setBirthDate] = useState('');
+  const [bookType, setBookType] = useState('picture');
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const calculateIlju = (dateString) => {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return null;
+    const baseDate = new Date('1900-01-01');
+    const diffDays = Math.floor((date - baseDate) / (1000 * 60 * 60 * 24));
+    const offset = (diffDays + 10) % 60;
+    const kanIdx = offset % 10;
+    const jiIdx = offset % 12;
+    return { 
+      kan: KAN[kanIdx], 
+      ji: JI[jiIdx], 
+      iljuName: KAN[kanIdx] + JI[jiIdx] + '일주' 
+    };
+  };
+
+  const fetchAIRecommendations = async (iljuInfo, kanTrait, jiTrait, type) => {
+    const targetType = type === 'picture' ? "그림책" : "성인 대상 문학 도서(소설, 시, 에세이 등)";
+    const prompt = `사주 명리학 '${iljuInfo.iljuName}'(특성: ${kanTrait.nature}, ${jiTrait})인 사람에게 영감을 줄 ${targetType} 3권을 추천해줘.
+    추천 사유는 문학적이고 감성적으로 작성해줘. 반드시 다음 JSON 형식으로만 응답해: { "books": [{ "title": "", "author": "", "reason": "", "description": "" }] }`;
+
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { responseMimeType: "application/json" }
+        })
+      });
+      const data = await response.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      const parsedData = JSON.parse(text);
+      return parsedData.books || [];
+    } catch (err) {
+      console.error("AI Fetch Error:", err);
+      throw new Error("서고에서 책을 꺼내는 중 오류가 발생했습니다.");
+    }
+  };
+
+  const handleAnalyze = async () => {
+    if (!birthDate) return;
+    setLoading(true);
+    setError(null);
+    setResult(null); // 새로운 요청 시 이전 결과 초기화
+
+    try {
+      const iljuInfo = calculateIlju(birthDate);
+      if (!iljuInfo) throw new Error("유효하지 않은 날짜입니다.");
+
+      const kanTrait = ILJU_DATA[iljuInfo.kan];
+      const jiTrait = JI_TRAITS[iljuInfo.ji];
+      
+      const recommendations = await fetchAIRecommendations(iljuInfo, kanTrait, jiTrait, bookType);
+      
+      setResult({ 
+        ...iljuInfo, 
+        ...kanTrait, 
+        jiDetail: jiTrait, 
+        bookTypeName: bookType === 'picture' ? '동심의 서재' : '사색의 서재', 
+        recommendations 
+      });
+    } catch (err) {
+      setError(err.message || "별의 궤적을 읽는 데 실패했습니다. 다시 시도해 주세요.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#0a0c1a] text-slate-200 font-serif selection:bg-amber-900 selection:text-amber-100 relative overflow-hidden">
+      {/* Background Atmosphere */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-900/20 blur-[120px] rounded-full" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-amber-900/10 blur-[120px] rounded-full" />
+      </div>
+
+      <div className="max-w-4xl mx-auto px-6 py-12 relative z-10">
+        <header className="text-center mb-16 space-y-4">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-amber-500/30 bg-amber-500/5 text-amber-400 text-sm tracking-widest uppercase mb-4 animate-pulse">
+            <Moon className="w-4 h-4" /> Destiny's Archive
+          </div>
+          <h1 className="text-4xl md:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-b from-amber-200 to-amber-500 drop-shadow-sm">
+            운명의 책장을 넘기다
+          </h1>
+          <p className="text-slate-400 text-lg max-w-xl mx-auto font-light leading-relaxed">
+            당신이 태어난 날의 별자리를 읽어, <br />생애의 궤적과 맞닿은 한 권의 문장을 선물합니다.
+          </p>
+        </header>
+
+        {/* Input Card */}
+        <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl mb-12 ring-1 ring-white/10">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-end">
+            <div className="space-y-3">
+              <label className="text-amber-200/70 text-sm tracking-wider flex items-center gap-2">
+                <Calendar className="w-4 h-4" /> 탄생의 기록 (생년월일)
+              </label>
+              <input
+                type="date"
+                value={birthDate}
+                onChange={(e) => setBirthDate(e.target.value)}
+                className="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-4 focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition-all outline-none text-white text-lg"
+              />
+            </div>
+            <div className="space-y-3">
+              <label className="text-amber-200/70 text-sm tracking-wider flex items-center gap-2">
+                <BookOpen className="w-4 h-4" /> 펼칠 서재의 종류
+              </label>
+              <div className="flex bg-black/40 p-1.5 rounded-2xl border border-white/5">
+                <button
+                  onClick={() => setBookType('picture')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl transition-all ${bookType === 'picture' ? 'bg-amber-500 text-black font-bold shadow-lg shadow-amber-500/20' : 'text-slate-400 hover:text-white'}`}
+                >
+                  <BabyIcon className="w-4 h-4" /> 동심의 서재
+                </button>
+                <button
+                  onClick={() => setBookType('adult')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl transition-all ${bookType === 'adult' ? 'bg-amber-500 text-black font-bold shadow-lg shadow-amber-500/20' : 'text-slate-400 hover:text-white'}`}
+                >
+                  <Book className="w-4 h-4" /> 사색의 서재
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={handleAnalyze}
+            disabled={!birthDate || loading}
+            className="w-full mt-10 py-5 bg-gradient-to-r from-amber-600 to-amber-400 hover:from-amber-500 hover:to-amber-300 disabled:from-slate-700 disabled:to-slate-800 text-black font-black text-xl rounded-2xl transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-xl shadow-amber-900/20 flex items-center justify-center gap-3 group"
+          >
+            {loading ? <RefreshCw className="w-6 h-6 animate-spin" /> : <Sparkles className="w-6 h-6 group-hover:rotate-12 transition-transform" />}
+            기록된 운명의 문장을 읽다
+          </button>
+          
+          {error && <p className="mt-4 text-center text-red-400 text-sm italic">{error}</p>}
+        </div>
+
+        {/* Loading Overlay */}
+        {loading && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center space-y-6">
+            <div className="relative">
+              <div className="w-24 h-24 border-t-2 border-b-2 border-amber-500 rounded-full animate-spin" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Sparkles className="w-8 h-8 text-amber-500 animate-pulse" />
+              </div>
+            </div>
+            <div className="text-center space-y-2">
+              <p className="text-2xl font-bold text-amber-200">별의 궤적을 쫓는 중...</p>
+              <p className="text-slate-400 font-light italic">당신을 위해 쓰여진 책장의 먼지를 털어내고 있습니다.</p>
+            </div>
+          </div>
+        )}
+
+        {/* Results */}
+        {result && !loading && (
+          <div className="space-y-12 animate-in fade-in zoom-in-95 duration-1000">
+            {/* Identity Card */}
+            <div className="relative group">
+              <div className="absolute -inset-1 bg-gradient-to-r from-amber-500 to-indigo-500 rounded-3xl blur opacity-20 group-hover:opacity-40 transition duration-1000" />
+              <div className="relative bg-slate-900/80 border border-white/10 rounded-3xl p-10 backdrop-blur-2xl">
+                <div className="flex flex-col md:flex-row items-center gap-10">
+                  <div className="relative">
+                    <div className="w-40 h-40 rounded-full bg-gradient-to-br from-amber-900 to-indigo-900 flex items-center justify-center border-2 border-amber-500/30 shadow-[0_0_50px_-12px_rgba(245,158,11,0.3)]">
+                      <span className="text-6xl font-black text-amber-200">{result.iljuName ? result.iljuName.substring(0, 2) : "--"}</span>
+                    </div>
+                    <div className="absolute -bottom-2 -right-2 bg-amber-500 text-black px-4 py-1 rounded-full text-xs font-black tracking-tighter">
+                      {result.element || "운명"}
+                    </div>
+                  </div>
+                  <div className="flex-1 text-center md:text-left space-y-4">
+                    <h2 className="text-3xl md:text-4xl font-bold">
+                      <span className="text-amber-400 italic">"{result.iljuName}"</span>의 기운을 머금은 당신
+                    </h2>
+                    <div className="text-xl text-slate-300 font-light leading-relaxed">
+                      "{result.nature}" <br /> 
+                      <span className="text-slate-500 text-base">{result.jiDetail}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2 pt-2 justify-center md:justify-start">
+                      {result.traits?.map((t, i) => (
+                        <span key={i} className="px-3 py-1 bg-white/5 border border-white/10 rounded-lg text-xs text-amber-200/80 uppercase tracking-widest font-semibold">
+                          #{t}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Books Section */}
+            <section className="space-y-8">
+              <div className="flex items-center gap-4 px-2">
+                <div className="h-px flex-1 bg-gradient-to-r from-transparent to-amber-500/30" />
+                <h3 className="text-2xl font-bold text-amber-200 flex items-center gap-2 text-center">
+                   당신을 위한 계시: {result.bookTypeName}
+                </h3>
+                <div className="h-px flex-1 bg-gradient-to-l from-transparent to-amber-500/30" />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                {result.recommendations?.map((book, idx) => (
+                  <div key={idx} className="flex flex-col bg-white/5 border border-white/10 rounded-3xl overflow-hidden hover:bg-white/10 transition-all group hover:-translate-y-2 duration-500 shadow-xl">
+                    <div className="aspect-[3/4] relative bg-black flex items-center justify-center p-8 overflow-hidden">
+                      <div className="absolute inset-0 opacity-20 grayscale transition-all group-hover:scale-110 group-hover:opacity-10 pointer-events-none">
+                        {/* Placeholder for visual aesthetic */}
+                        <div className="w-full h-full bg-gradient-to-br from-slate-800 to-black" />
+                      </div>
+                      <div className="z-10 text-center space-y-3 px-4">
+                        <BookOpen className="w-10 h-10 text-amber-500/30 mx-auto group-hover:text-amber-500 transition-colors" />
+                        <h5 className="text-amber-100 font-bold leading-tight line-clamp-2 text-lg">{book.title}</h5>
+                      </div>
+                      <div className="absolute top-4 left-4 bg-amber-500/20 backdrop-blur-md border border-amber-500/30 text-amber-400 px-3 py-1 rounded-full text-[10px] font-bold tracking-widest uppercase">
+                        Chapter {idx + 1}
+                      </div>
+                    </div>
+                    
+                    <div className="p-6 flex-1 flex flex-col space-y-4">
+                      <div>
+                        <p className="text-xs text-amber-500 font-bold uppercase tracking-widest mb-1">{book.author}</p>
+                        <h4 className="text-xl font-bold text-white group-hover:text-amber-400 transition-colors">{book.title}</h4>
+                      </div>
+
+                      <div className="bg-amber-900/20 p-4 rounded-2xl border border-amber-500/10">
+                        <div className="text-[13px] text-amber-200/90 leading-relaxed font-light italic">
+                          <span className="text-[10px] font-bold text-amber-500 block mb-2 uppercase tracking-tighter not-italic">Archive Insight</span>
+                          "{book.reason}"
+                        </div>
+                      </div>
+
+                      <p className="text-slate-400 text-sm leading-relaxed line-clamp-3 font-light">
+                        {book.description}
+                      </p>
+
+                      <a 
+                        href={`https://search.kyobobook.co.kr/search?keyword=${encodeURIComponent(book.title)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-auto w-full py-3 bg-white/5 hover:bg-amber-500 hover:text-black border border-white/10 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 group/btn"
+                      >
+                        상세 기록 펼치기 <ArrowRight className="w-3 h-3 group-hover/btn:translate-x-1 transition-transform" />
+                      </a>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* Final Quote Footer */}
+            <footer className="text-center py-10 space-y-4">
+              <div className="w-16 h-[1px] bg-amber-500/30 mx-auto" />
+              <p className="text-slate-500 text-sm italic font-light">
+                "이 책장은 당신의 생년월일이 빚어낸 빛의 궤적을 따라 펼쳐졌습니다."
+              </p>
+            </footer>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default App;
