@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>운명의 서재 - 실시간 AI 도서 큐레이션</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@200;400;700;900&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Noto Serif KR', serif; }
+        .fade-in { animation: fadeIn 1s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .glass-panel { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
+        .step-badge { @apply w-6 h-6 rounded-full bg-amber-500 text-black text-[10px] font-bold flex items-center justify-center; }
+    </style>
+</head>
+<body class="min-h-screen bg-[#0a0c1a] text-slate-200 selection:bg-amber-900 selection:text-amber-100 relative overflow-x-hidden">
+
+    <!-- 배경 장식 -->
+    <div class="absolute inset-0 overflow-hidden pointer-events-none">
+        <div class="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-900/20 blur-[120px] rounded-full"></div>
+        <div class="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-amber-900/10 blur-[120px] rounded-full"></div>
+    </div>
+
+    <div class="max-w-4xl mx-auto px-6 py-12 relative z-10">
+        <header class="text-center mb-16 space-y-4">
+            <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-amber-500/30 bg-amber-500/5 text-amber-400 text-sm tracking-widest uppercase mb-4 animate-pulse">
+                <i class="fas fa-star"></i> Universal Destiny Archive
+            </div>
+            <h1 class="text-4xl md:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-b from-amber-200 to-amber-500">
+                운명의 책장을 넘기다
+            </h1>
+            <p class="text-slate-400 text-lg max-w-xl mx-auto font-light leading-relaxed">
+                Gemini AI가 당신의 생년월일을 분석하여,<br>전 세계 수많은 도서 중 지금 당신에게 가장 필요한 문장을 찾아냅니다.
+            </p>
+        </header>
+
+        <div class="glass-panel rounded-3xl p-8 shadow-2xl mb-12 space-y-8">
+            <div class="space-y-3">
+                <div class="flex justify-between items-center">
+                    <label class="text-amber-200/70 text-sm tracking-wider flex items-center gap-2">
+                        <i class="fas fa-key"></i> Gemini API Key
+                    </label>
+                    <button onclick="toggleGuide()" class="text-[11px] text-amber-500 hover:text-amber-400 underline underline-offset-4 transition-all">
+                        <i class="fas fa-question-circle"></i> 30초 만에 키 발급받기
+                    </button>
+                </div>
+                <div class="flex gap-2">
+                    <input type="password" id="apiKeyInput" placeholder="API 키를 입력해주세요" class="flex-1 bg-black/40 border border-white/10 rounded-2xl px-5 py-3 focus:ring-2 focus:ring-amber-500/50 outline-none text-white text-sm">
+                    <button onclick="saveApiKey()" id="btnSaveKey" class="px-6 py-3 bg-white/10 hover:bg-white/20 rounded-2xl text-xs font-bold transition-all border border-white/5">키 저장</button>
+                </div>
+                <p id="keyStatus" class="text-[10px] text-slate-500 italic">API 키를 입력하고 '키 저장'을 눌러주세요.</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-end">
+                <div class="space-y-3">
+                    <label class="text-amber-200/70 text-sm tracking-wider flex items-center gap-2">
+                        <i class="fas fa-calendar-alt"></i> 탄생의 기록 (생년월일)
+                    </label>
+                    <input type="date" id="birthDate" class="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-4 focus:ring-2 focus:ring-amber-500/50 outline-none text-white text-lg">
+                </div>
+                <div class="space-y-3">
+                    <label class="text-amber-200/70 text-sm tracking-wider flex items-center gap-2">
+                        <i class="fas fa-book-open"></i> 추천 받고 싶은 도서 성격
+                    </label>
+                    <div class="flex bg-black/40 p-1.5 rounded-2xl border border-white/5">
+                        <button onclick="toggleBookType('picture')" id="btnPicture" class="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl transition-all bg-amber-500 text-black font-bold">
+                            <i class="fas fa-child"></i> 그림책
+                        </button>
+                        <button onclick="toggleBookType('adult')" id="btnAdult" class="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl transition-all text-slate-400">
+                            <i class="fas fa-book"></i> 인문/문학
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <button onclick="handleAnalyze()" id="btnAnalyze" class="w-full mt-10 py-5 bg-gradient-to-r from-amber-600 to-amber-400 text-black font-black text-xl rounded-2xl transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-xl flex items-center justify-center gap-3">
+                <i class="fas fa-sparkles"></i> 운명의 문장을 읽다
+            </button>
+            <div id="errorArea" class="hidden mt-4 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-center">
+                <p id="errorMsg" class="text-red-400 text-xs italic font-medium"></p>
+                <p class="text-[10px] text-red-400/60 mt-1">입력한 키가 유효한지(띄어쓰기 등), 혹은 무료 할당량이 남았는지 확인해 주세요.</p>
+            </div>
+        </div>
+
+        <div id="resultArea" class="hidden space-y-12 fade-in"></div>
+    </div>
+
+    <!-- API Key 가이드 모달 -->
+    <div id="guideModal" class="hidden fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-6">
+        <div class="max-w-md w-full glass-panel rounded-[2.5rem] p-8 space-y-6 relative border-amber-500/30">
+            <button onclick="toggleGuide()" class="absolute top-6 right-6 text-slate-400 hover:text-white">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+            <div class="text-center space-y-2">
+                <h3 class="text-2xl font-bold text-amber-400">Gemini API 키 발급 가이드</h3>
+                <p class="text-sm text-slate-400 font-light">구글 계정만 있다면 누구나 무료로 가능합니다.</p>
+            </div>
+            <div class="space-y-4 py-4">
+                <div class="flex gap-4">
+                    <div class="step-badge">1</div>
+                    <div class="flex-1">
+                        <p class="text-sm font-bold text-white">AI Studio 접속</p>
+                        <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-[11px] text-amber-500 underline underline-offset-4">구글 AI 스튜디오 바로가기 <i class="fas fa-external-link-alt ml-1"></i></a>
+                    </div>
+                </div>
+                <div class="flex gap-4">
+                    <div class="step-badge">2</div>
+                    <div class="flex-1 text-sm text-slate-300">
+                        좌측 상단 <span class="text-amber-200 font-bold">'Get API key'</span> 메뉴 클릭
+                    </div>
+                </div>
+                <div class="flex gap-4">
+                    <div class="step-badge">3</div>
+                    <div class="flex-1 text-sm text-slate-300">
+                        파란색 <span class="text-amber-200 font-bold">'Create API key'</span> 버튼 클릭 후 발급된 키 복사
+                    </div>
+                </div>
+            </div>
+            <button onclick="toggleGuide()" class="w-full py-4 bg-white/10 rounded-2xl text-sm font-bold hover:bg-white/20 transition-all">알겠습니다</button>
+        </div>
+    </div>
+
+    <!-- 로딩 오버레이 -->
+    <div id="loadingOverlay" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center space-y-6">
+        <div class="w-20 h-20 border-4 border-amber-500/20 border-t-amber-500 rounded-full animate-spin"></div>
+        <p class="text-xl font-bold text-amber-200 animate-pulse">당신의 운명을 책장에서 찾는 중...</p>
+    </div>
+
+    <script>
+        let currentBookType = 'picture';
+
+        window.onload = () => {
+            const savedKey = localStorage.getItem('gemini_api_key');
+            if (savedKey) {
+                document.getElementById('apiKeyInput').value = savedKey;
+                document.getElementById('keyStatus').innerText = "기존에 저장된 키를 불러왔습니다.";
+                document.getElementById('btnSaveKey').innerText = "키 수정";
+            }
+        };
+
+        function toggleGuide() {
+            document.getElementById('guideModal').classList.toggle('hidden');
+        }
+
+        function saveApiKey() {
+            const key = document.getElementById('apiKeyInput').value.trim();
+            if (key) {
+                localStorage.setItem('gemini_api_key', key);
+                document.getElementById('keyStatus').innerText = "키가 안전하게 저장되었습니다.";
+                document.getElementById('btnSaveKey').innerText = "키 수정";
+                document.getElementById('errorArea').classList.add('hidden');
+            } else {
+                document.getElementById('keyStatus').innerText = "키를 먼저 입력해주세요.";
+            }
+        }
+
+        function toggleBookType(type) {
+            currentBookType = type;
+            const btnP = document.getElementById('btnPicture');
+            const btnA = document.getElementById('btnAdult');
+            if (type === 'picture') {
+                btnP.className = "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl transition-all bg-amber-500 text-black font-bold";
+                btnA.className = "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl transition-all text-slate-400";
+            } else {
+                btnA.className = "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl transition-all bg-amber-500 text-black font-bold";
+                btnP.className = "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl transition-all text-slate-400";
+            }
+        }
+
+        const KAN_DATA = {
+            '갑': { name: '갑목(甲木)', nature: '하늘을 향한 고결한 거목', icon: 'fa-tree' },
+            '을': { name: '을목(乙木)', nature: '바람에 춤추는 강인한 생명력의 꽃', icon: 'fa-seedling' },
+            '병': { name: '병화(丙火)', nature: '모든 것을 품어주는 찬란한 태양', icon: 'fa-sun' },
+            '정': { name: '정화(丁火)', nature: '어둠을 밝히는 따스한 등불', icon: 'fa-fire' },
+            '무': { name: '무토(戊土)', nature: '웅장하고 든든한 황금빛 대지', icon: 'fa-mountain' },
+            '기': { name: '기토(己土)', nature: '생명을 기르는 포근한 논밭', icon: 'fa-clover' },
+            '경': { name: '경금(庚金)', nature: '강직하고 정의로운 바위와 칼', icon: 'fa-shish-kebab' },
+            '신': { name: '신금(辛金)', nature: '세심하고 고귀하게 빛나는 보석', icon: 'fa-gem' },
+            '임': { name: '임수(壬수)', nature: '지혜를 품고 흐르는 도도한 바다', icon: 'fa-water' },
+            '계': { name: '계수(癸수)', nature: '만물을 적시는 영특한 단비', icon: 'fa-cloud-showers-heavy' }
+        };
+
+        const JI_DATA = {
+            '자': '쥐', '축': '소', '인': '호랑이', '묘': '토끼', '진': '용', '사': '뱀',
+            '오': '말', '미': '양', '신': '원숭이', '유': '닭', '술': '개', '해': '돼지'
+        };
+
+        async function handleAnalyze() {
+            const birthInput = document.getElementById('birthDate').value;
+            let apiKey = document.getElementById('apiKeyInput').value.trim();
+            const errorArea = document.getElementById('errorArea');
+            const errorMsg = document.getElementById('errorMsg');
+
+            // 브라우저 저장소에 키가 있다면 그것을 우선 사용
+            if (!apiKey) {
+                apiKey = localStorage.getItem('gemini_api_key');
+            }
+
+            if (!birthInput || !apiKey) {
+                errorMsg.innerText = "생년월일과 API 키를 모두 입력해 주세요.";
+                errorArea.classList.remove('hidden');
+                return;
+            }
+
+            document.getElementById('loadingOverlay').classList.remove('hidden');
+            errorArea.classList.add('hidden');
+
+            const date = new Date(birthInput);
+            const baseDate = new Date('1900-01-01');
+            const diffDays = Math.floor((date - baseDate) / (1000 * 60 * 60 * 24));
+            const offset = (diffDays + 10) % 60;
+            const kan = ['갑', '을', '병', '정', '무', '기', '경', '신', '임', '계'][offset % 10];
+            const ji = ['자', '축', '인', '묘', '진', '사', '오', '미', '신', '유', '술', '해'][offset % 12];
+            const ilju = kan + ji;
+
+            const targetStr = currentBookType === 'picture' ? "그림책" : "인문/문학 도서";
+            const prompt = `사주 '${ilju}일주'(천간: ${KAN_DATA[kan].name}, 지지 동물: ${JI_DATA[ji]})인 사람에게 어울리는 ${targetStr} 3권을 추천해줘. 
+            한국어로 답변해줘. 반드시 JSON 형식으로만 답변해: { "books": [{ "title": "", "author": "", "reason": "", "description": "" }] }`;
+
+            const fetchWithRetry = async (url, options, retries = 5, backoff = 1000) => {
+                for (let i = 0; i < retries; i++) {
+                    try {
+                        const response = await fetch(url, options);
+                        if (response.ok) return await response.json();
+                        
+                        const errorData = await response.json();
+                        if (response.status === 429 || response.status >= 500) {
+                            await new Promise(r => setTimeout(r, backoff));
+                            backoff *= 2;
+                            continue;
+                        }
+                        throw new Error(errorData.error?.message || "API 요청 중 오류가 발생했습니다.");
+                    } catch (err) {
+                        if (i === retries - 1) throw err;
+                        await new Promise(r => setTimeout(r, backoff));
+                        backoff *= 2;
+                    }
+                }
+            };
+
+            try {
+                // 정확한 모델명 사용
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+                const data = await fetchWithRetry(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }],
+                        generationConfig: { 
+                            responseMimeType: "application/json",
+                            temperature: 0.7
+                        }
+                    })
+                });
+
+                if (!data.candidates || data.candidates.length === 0) {
+                    throw new Error("AI가 응답을 생성하지 못했습니다. 키를 다시 확인해 주세요.");
+                }
+
+                const resultText = data.candidates[0].content.parts[0].text;
+                const books = JSON.parse(resultText).books;
+                renderResult(ilju, kan, ji, books);
+            } catch (err) {
+                console.error(err);
+                errorMsg.innerText = "연결 실패: " + err.message;
+                errorArea.classList.remove('hidden');
+            } finally {
+                document.getElementById('loadingOverlay').classList.add('hidden');
+            }
+        }
+
+        function renderResult(ilju, kanKey, jiKey, books) {
+            const kan = KAN_DATA[kanKey];
+            const resultArea = document.getElementById('resultArea');
+            resultArea.innerHTML = `
+                <div class="glass-panel rounded-3xl p-10 flex flex-col md:flex-row items-center gap-12 border-amber-500/20">
+                    <div class="relative">
+                        <div class="w-40 h-40 rounded-full bg-gradient-to-tr from-amber-600 to-amber-300 flex flex-col items-center justify-center shadow-2xl">
+                            <span class="text-5xl font-black text-black">${ilju}</span>
+                            <span class="text-[10px] text-black/60 font-bold mt-1 tracking-tighter">My Destiny Key</span>
+                        </div>
+                        <div class="absolute -bottom-2 -right-2 w-12 h-12 rounded-2xl bg-black border border-amber-500/40 flex items-center justify-center text-amber-500 shadow-xl rotate-12">
+                            <i class="fas ${kan.icon} text-xl"></i>
+                        </div>
+                    </div>
+                    <div class="flex-1 text-center md:text-left space-y-4">
+                        <div class="inline-flex gap-2 mb-2">
+                            <span class="px-3 py-1 bg-white/5 border border-white/10 rounded-full text-[10px] font-bold text-amber-400 tracking-widest">${kan.name}</span>
+                            <span class="px-3 py-1 bg-white/5 border border-white/10 rounded-full text-[10px] font-bold text-indigo-400 tracking-widest">${JI_DATA[jiKey]}의 기운</span>
+                        </div>
+                        <h2 class="text-3xl font-bold leading-tight">
+                            당신은 <span class="text-amber-400">"${kan.nature}"</span>을 닮은 존재입니다.
+                        </h2>
+                        <p class="text-slate-400 font-light leading-relaxed">
+                            당신의 고유한 빛이 가장 아름답게 투영될 세 권의 책을 제안합니다.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    ${books.map((b, i) => `
+                        <div class="bg-white/5 border border-white/10 rounded-[2.5rem] p-8 space-y-5 hover:bg-white/10 transition-all group">
+                            <div class="h-44 bg-black/40 rounded-2xl flex flex-col items-center justify-center border border-white/5 group-hover:border-amber-500/30">
+                                <i class="fas fa-book-open text-4xl text-amber-500/20 group-hover:text-amber-500/50"></i>
+                            </div>
+                            <div class="space-y-2">
+                                <h3 class="font-bold text-xl text-amber-100 group-hover:text-amber-400 transition-colors line-clamp-1">${b.title}</h3>
+                                <p class="text-[11px] text-slate-500 font-bold tracking-widest">${b.author}</p>
+                            </div>
+                            <p class="text-xs text-slate-400 leading-relaxed line-clamp-3">${b.description}</p>
+                            <div class="bg-amber-500/5 p-4 rounded-2xl border border-amber-500/10">
+                                <p class="text-[11px] text-amber-200/80 italic leading-relaxed">
+                                    <i class="fas fa-quote-left text-[8px] mb-1 block opacity-50"></i>
+                                    "${b.reason}"
+                                </p>
+                            </div>
+                            <a href="https://search.kyobobook.co.kr/search?keyword=${encodeURIComponent(b.title)}" target="_blank" class="block w-full py-3.5 bg-white/5 hover:bg-amber-500 hover:text-black rounded-xl text-center text-[11px] font-bold transition-all">
+                                자세히 알아보기 <i class="fas fa-chevron-right ml-1 text-[8px]"></i>
+                            </a>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            resultArea.classList.remove('hidden');
+            window.scrollTo({ top: resultArea.offsetTop - 50, behavior: 'smooth' });
+        }
+    </script>
+</body>
+</html>
